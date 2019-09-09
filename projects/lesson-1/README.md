@@ -10,8 +10,11 @@
 # 截图
 
 * 1.发送交易
+![image](https://raw.githubusercontent.com/ZhiGuang/Team2/master/projects/lesson-1/screenshots/1-send-tx.png)
 
 * 2.交易成功
+![image](https://raw.githubusercontent.com/ZhiGuang/Team2/master/projects/lesson-1/screenshots/2-tx-suc.png)
 
 * 3.区块详细资料
+![image](https://raw.githubusercontent.com/ZhiGuang/Team2/master/projects/lesson-1/screenshots/3-block-tx-detail.png)
 

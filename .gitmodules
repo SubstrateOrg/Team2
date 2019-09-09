@@ -1,0 +1,3 @@
+[submodule "projects/lesson-1/kitty"]
+	path = projects/lesson-1/kitty
+	url = https://github.com/lancelot96/kitty

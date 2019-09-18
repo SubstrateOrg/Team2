@@ -12,12 +12,13 @@ use rstd::prelude::*;
 use support::{decl_module, decl_storage, decl_event, StorageValue, StorageMap, dispatch::Result};
 use codec::{Encode,Decode};
 use system::ensure_signed;
+use runtime_io::blake2_128;
 //use primitives::traits::{As};
 
 #[derive(Encode, Decode, Default, Clone, PartialEq)]
 #[cfg_attr(feature = "std", derive(Debug))]
-pub struct Kitty<H,U> {
-	dna: H,
+pub struct Kitty<U> {
+	dna: [u8; 16],
 	owner: U,
 	price: u64
 }
@@ -38,7 +39,7 @@ decl_storage! {
 
 		//所有Kitty: kitty_id => kitty
 		//可以通过递增kitty_id遍历所有kitties，通过kitties_count终止遍历
-        pub Kitties get(kitties): map u32 => Kitty<T::Hash, T::AccountId>;
+        pub Kitties get(kitties): map u32 => Kitty<T::AccountId>;
 		//Kitty总数，模拟数组，用途：确定新增Kitty在map中的key，遍历所有Kitty
         pub KittiesCount get(kitties_count): u32;
 
@@ -64,9 +65,9 @@ decl_module! {
 			let sender = ensure_signed(origin)?;
 
 			let kitty_id = Self::kitties_count();
-			let account_kitty_id = Self::account_kitties_count(sender.clone());
+			let account_kitty_id = Self::account_kitties_count(&sender);
 
-			let dna = <system::Module<T>>::random_seed();
+			let dna = Self::dna(&sender, kitty_id);
 
 			let kitty = Kitty {
 				dna: dna,
@@ -124,10 +125,10 @@ decl_event!(
 
 
 impl<T: Trait> Module<T> {
-	// pub fn dna(sender: T::AccountId, nonce: u32) -> Result<'static &T::Hash> {
-	// 	let h = <system::Module<T>>::random_seed();
-	// 	Ok(h)
-	// }
+	fn dna(sender: &T::AccountId, kitty_id: u32) -> [u8; 16] {
+		(<system::Module<T>>::random_seed(), sender, kitty_id)
+		.using_encoded(blake2_128)
+	}
 }
 
 /// tests for this module

@@ -26,6 +26,14 @@ decl_storage! {
 		// Here we are declaring a StorageValue, `Something` as a Option<u32>
 		// `get(something)` is the default getter which returns either the stored `u32` or `None` if nothing stored
 		Something get(something): Option<u32>;
+
+		//test
+		MyU32: u32;
+		MyBool get(my_bool_getter): bool;
+
+		//test map
+		SomeValue get(some_value_getter): map u32 => u32;
+		MyValue: map T::AccountId => u32;
 	}
 }
 
@@ -50,6 +58,14 @@ decl_module! {
 
 			// here we are raising the Something event
 			Self::deposit_event(RawEvent::SomethingStored(something, who));
+			Ok(())
+		}
+
+		//test 
+		pub fn my_function(origin, input_bool: bool) -> Result {
+			let _sender = ensure_signed(origin)?;
+
+			MyBool::put(input_bool);
 			Ok(())
 		}
 	}

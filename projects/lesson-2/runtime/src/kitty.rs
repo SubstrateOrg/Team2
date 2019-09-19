@@ -11,6 +11,8 @@
 use support::{decl_module, decl_storage, decl_event, StorageValue, dispatch::Result};
 use system::ensure_signed;
 
+use codec::{Encode, Decode};
+
 /// The module's configuration trait.
 pub trait Trait: system::Trait {
 	// TODO: Add other types and constants required configure this module.
@@ -19,9 +21,18 @@ pub trait Trait: system::Trait {
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 }
 
+#[derive(Encode, Decode, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "std", derive(Debug))]
+pub struct Kitty<Hash, Balance> {
+	id: Hash,
+	dna: Hash,
+	price: Balance,
+	gen: u64,
+}
+
 /// This module's storage items.
 decl_storage! {
-	trait Store for Module<T: Trait> as TemplateModule {
+	trait Store for Module<T: Trait> as Kitties {
 		// Just a dummy storage item. 
 		// Here we are declaring a StorageValue, `Something` as a Option<u32>
 		// `get(something)` is the default getter which returns either the stored `u32` or `None` if nothing stored

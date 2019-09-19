@@ -62,6 +62,16 @@ decl_module! {
 			Self::deposit_event(RawEvent::SomethingStored(something, who));
 			Ok(())
 		}
+
+        fn create_kitty(origin) -> Result {
+            let sender = ensure_signed(origin)?;
+
+			//TODO:
+			//a. new kitty
+			//b. store kitty
+
+            Ok(())
+        }
 	}
 }
 

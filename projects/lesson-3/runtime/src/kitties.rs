@@ -3,8 +3,7 @@ use codec::{Encode, Decode};
 use runtime_io::blake2_128;
 use system::ensure_signed;
 
-pub trait Trait: system::Trait {
-}
+pub trait Trait: system::Trait {}
 
 #[derive(Encode, Decode, Default)]
 pub struct Kitty(pub [u8; 16]);
@@ -20,18 +19,32 @@ decl_storage! {
 
 decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
+
 		/// Create a new kitty
 		pub fn create(origin) {
 			let sender = ensure_signed(origin)?;
 			let count = Self::kitties_count();
-			if count == u32::max_value() {
-				return Err("Kitties count overflow");
-			}
-			let payload = (<system::Module<T>>::random_seed(), sender, <system::Module<T>>::extrinsic_index(), <system::Module<T>>::block_number());
+
+			let payload = (<system::Module<T>>::random_seed(),
+				sender,
+				<system::Module<T>>::extrinsic_index(),
+				<system::Module<T>>::block_number()
+			);
+
 			let dna = payload.using_encoded(blake2_128);
 			let kitty = Kitty(dna);
 			Kitties::insert(count, kitty);
-			KittiesCount::put(count + 1);
+
+			match count.checked_add(1) { // check u32 type overflow
+					Some(v) => {
+							KittiesCount::put(v);
+					}
+					None => {
+							return Err(" Kitties count overflow!")
+					}
+			};
+
 		}
+
 	}
 }

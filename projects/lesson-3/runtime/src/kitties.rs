@@ -46,5 +46,57 @@ decl_module! {
 
 		}
 
+		// 公猫 母猫繁殖小猫咪
+		// 选2只现有的猫 ，作为公猫 母猫
+		pub fn breed(origin, tomcat: u32, femalecat: u32) {
+			let sender = ensure_signed(origin)?;
+
+			if tomcat == femalecat {
+					return Err("the kitties ID not the same!");
+			}
+
+			let kitty1 = Self::kitty(tomcat);
+			let kitty2 = Self::kitty(femalecat);
+			let count = Self::kitties_count();
+
+			let updated_count = count.checked_add(1);
+
+ 			match count.checked_add(1) { // check u32 type overflow
+					Some(v) => {
+							let kitty1_dna = kitty1.0;
+							let kitty2_dna = kitty2.0;
+
+							let payload = (<system::Module<T>>::random_seed(), sender,
+							<system::Module<T>>::extrinsic_index(),
+							<system::Module<T>>::block_number()
+							);
+
+							let dna = payload.using_encoded(blake2_128);
+							let mut child_dna = [0u8; 16];
+
+							// 设计child cat 的dna代码
+							// 父母 各取一半， 生成的子代不能重复
+							for i in 0..kitty1_dna.len() {
+									child_dna[i] = (!dna[i] & kitty1_dna[i]) | (dna[i] & kitty2_dna[i]);
+							}
+
+							let child_kitty = Kitty(child_dna);
+							Kitties::insert(count, child_kitty);
+							KittiesCount::put(v);
+					}
+					None => {
+							return Err(" Kitties count overflow!")
+					}
+			};
+
+
+
+
+
+
+
+	}
+
+
 	}
 }

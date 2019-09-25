@@ -62,6 +62,26 @@ decl_module! {
 
 			Self::do_breed(sender, kitty_id_1, kitty_id_2)?;
 		}
+
+		/// transfer kitties
+		pub fn transfer(origin, to: T::AccountId, kitty_id: T::KittyIndex) {
+			let sender = ensure_signed(origin)?;
+
+			let kitty = Self::kitty(kitty_id);
+
+			// check kitty
+			ensure!(kitty.is_some(), "kitty does not exist");
+			//ensure!(<OwnedKitties<T>>::exists(&(sender.clone(), Some(kitty_id))), "Only owner can transfer kitty");
+
+			// check kitty's owner != to ==> from != to
+
+			// from remove: kitty, from_kitty_count-1
+			// <OwnedKitties<T>>::remove((owner.clone(), user_kitties_id), kitty_id);
+			// <OwnedKittiesCount<T>>::insert(owner, user_kitties_id - 1.into());
+
+			// to add kitty
+			//Self::insert_kitty(to, kitty_id, kitty);
+		}
 	}
 }
 

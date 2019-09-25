@@ -4,6 +4,7 @@ use codec::{Encode, Decode};
 use runtime_io::blake2_128;
 use system::ensure_signed;
 use rstd::result;
+use core::convert::TryInto;
 
 pub trait Trait: system::Trait {
 	type KittyIndex: Parameter + SimpleArithmetic + Bounded + Default + Copy;
@@ -40,8 +41,9 @@ decl_module! {
 			}
 
 			// Generate a random 128bit value
-			let payload = (<system::Module<T>>::random_seed(), &sender, <system::Module<T>>::extrinsic_index(), <system::Module<T>>::block_number());
-			let dna = payload.using_encoded(blake2_128);
+			// let payload = (<system::Module<T>>::random_seed(), &sender, <system::Module<T>>::extrinsic_index(), <system::Module<T>>::block_number());
+			// let dna = payload.using_encoded(blake2_128);
+			let dna = Self::random_value(&sender);
 
 			// Create and store kitty
 			let kitty = Kitty(dna);
@@ -63,13 +65,38 @@ decl_module! {
 	}
 }
 
+fn to_binary_arr(number: u8) -> [u8; 8] {
+    let mut arr:[u8; 8] = [0; 8];
+    for i in 0..8 {
+        if number & (1 << i) > 0 {
+			arr[i] = 1;
+        }
+    }
+    return arr;
+}
+
 fn combine_dna(dna1: u8, dna2: u8, selector: u8) -> u8 {
 	// 作业：实现combine_dna
 	// 伪代码：
 	// selector.map_bits(|bit, index| if (bit == 1) { dna1 & (1 << index) } else { dna2 & (1 << index) })
 	// 注意 map_bits这个方法不存在。只要能达到同样效果，不局限算法
 	// 测试数据：dna1 = 0b11110000, dna2 = 0b11001100, selector = 0b10101010, 返回值 0b11100100
-	return dna1;
+	//u8 --> binary array
+    let dna1_arr = to_binary_arr(dna1);
+    let dna2_arr = to_binary_arr(dna2);
+    let selector_arr = to_binary_arr(selector);
+
+    let mut dna = 0u8;
+    for i in 0..8 {
+        if selector_arr[i] == 1 {
+			let value:u8 = (i << dna1_arr[i]).try_into().unwrap();
+			dna = dna + value;
+        } else {
+			let value:u8 = (i << dna2_arr[i]).try_into().unwrap();
+			dna = dna + value;
+        }
+    }
+	return dna;
 }
 
 impl<T: Trait> Module<T> {

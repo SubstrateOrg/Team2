@@ -65,7 +65,10 @@ fn combine_dna(dna1: u8, dna2: u8, selector: u8) -> u8 {
 	// selector.map_bits(|bit, index| if (bit == 1) { dna1 & (1 << index) } else { dna2 & (1 << index) })
 	// 注意 map_bits这个方法不存在。只要能达到同样效果，不局限算法
 	// 测试数据：dna1 = 0b11110000, dna2 = 0b11001100, selector = 0b10101010, 返回值 0b11100100
-	return dna1;
+	// return dna1;
+
+	(dna1 & selector) | (dna2 & (!selector))  // 看的别人的 pr
+
 }
 
 impl<T: Trait> Module<T> {
@@ -121,4 +124,26 @@ impl<T: Trait> Module<T> {
 
 		Ok(())
 	}
+}
+
+
+#[cfg(test)]
+mod tests {
+
+	use super::*;
+
+	#[test]
+	fn test_combine_dna() {
+
+		let dna1 = 0b11110000;
+		let dna2 = 0b11001100;
+		let selector = 0b10101010;
+		let dna = combine_dna(dna1, dna2, selector);
+
+		// assert_eq!(dna, 0b11100100);
+		assert_eq!(dna, 0b111001);
+		// dna == 0b11100100，但是执行 cargo test 并没有报错，只好用以下链接的代码测试了
+		// https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=2e3dabbfab2aa6a8286285648835724d
+	}
+
 }

@@ -64,23 +64,25 @@ decl_module! {
 		}
 
 		/// transfer kitties
-		pub fn transfer(origin, to: T::AccountId, kitty_id: T::KittyIndex) {
+		pub fn transfer(origin, from: T::AccountId, to: T::AccountId, kitty_id: T::KittyIndex) {
 			let sender = ensure_signed(origin)?;
 
-			let kitty = Self::kitty(kitty_id);
+			ensure!(from != to, "from is not equal to");
+			// let kitty_index = Self::owned_kitties(from, kitty_id);
+			// if kitty_index != kitty_id {
+			// 	return Err("'from' account does not own this kitty_id");
+			// }
 
-			// check kitty
+			let kitty = Self::kitty(kitty_id);  
 			ensure!(kitty.is_some(), "kitty does not exist");
-			//ensure!(<OwnedKitties<T>>::exists(&(sender.clone(), Some(kitty_id))), "Only owner can transfer kitty");
-
-			// check kitty's owner != to ==> from != to
 
 			// from remove: kitty, from_kitty_count-1
-			// <OwnedKitties<T>>::remove((owner.clone(), user_kitties_id), kitty_id);
-			// <OwnedKittiesCount<T>>::insert(owner, user_kitties_id - 1.into());
+			let user_kitties_id = Self::owned_kitties_count(from.clone());
+			<OwnedKitties<T>>::insert((from.clone(), user_kitties_id), kitty_id);
+			<OwnedKittiesCount<T>>::insert(from, user_kitties_id - 1.into());
 
 			// to add kitty
-			//Self::insert_kitty(to, kitty_id, kitty);
+			//Self::insert_kitty(to, kitty_id, kitty.clone());
 		}
 	}
 }

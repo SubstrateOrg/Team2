@@ -26,6 +26,7 @@ decl_storage! {
 	}
 }
 
+
 decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
 		/// Create a new kitty
@@ -45,13 +46,8 @@ decl_module! {
 
 			// Create and store kitty
 			let kitty = Kitty(dna);
-			<Kitties<T>>::insert(kitty_id, kitty);
-			<KittiesCount<T>>::put(kitty_id + 1.into());
 
-			// Store the ownership information
-			let user_kitties_id = Self::owned_kitties_count(&sender);
-			<OwnedKitties<T>>::insert((sender.clone(), user_kitties_id), kitty_id);
-			<OwnedKittiesCount<T>>::insert(sender, user_kitties_id + 1.into());
+			Self::insert_kitty(sender, kitty_id, kitty);
 		}
 
 		/// Breed kitties
@@ -73,6 +69,7 @@ fn combine_dna(dna1: u8, dna2: u8, selector: u8) -> u8 {
 }
 
 impl<T: Trait> Module<T> {
+
 	fn random_value(sender: &T::AccountId) -> [u8; 16] {
 		let payload = (<system::Module<T>>::random_seed(), sender, <system::Module<T>>::extrinsic_index(), <system::Module<T>>::block_number());
 		payload.using_encoded(blake2_128)
@@ -83,6 +80,7 @@ impl<T: Trait> Module<T> {
 		if kitty_id == T::KittyIndex::max_value() {
 			return Err("Kitties count overflow");
 		}
+
 		Ok(kitty_id)
 	}
 

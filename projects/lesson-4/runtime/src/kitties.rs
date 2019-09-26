@@ -67,6 +67,7 @@ fn combine_dna(dna1: u8, dna2: u8, selector: u8) -> u8 {
 	// 测试数据：dna1 = 0b11110000, dna2 = 0b11001100, selector = 0b10101010, 返回值 0b11100100
 	// return dna1;
 
+	// !selector 按位取反 类似~selector
 	(dna1 & selector) | (dna2 & (!selector))  // 看的别人的 pr
 
 }

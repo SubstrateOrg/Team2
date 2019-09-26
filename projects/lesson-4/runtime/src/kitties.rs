@@ -141,9 +141,8 @@ mod tests {
 		let selector = 0b10101010;
 		let dna = combine_dna(dna1, dna2, selector);
 
-		// assert_eq!(dna, 0b11100100);
-		assert_eq!(dna, 0b111001);
-		// dna == 0b11100100，但是执行 cargo test 并没有报错，只好用以下链接的代码测试了
+		assert_eq!(dna, 0b11100100);
+		// cargo test -p substrate-kitties-runtime # -p 后加模块名
 		// https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=2e3dabbfab2aa6a8286285648835724d
 	}
 

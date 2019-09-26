@@ -47,13 +47,15 @@ decl_module! {
 
 			// Create and store kitty
 			let kitty = Kitty(dna);
-			<Kitties<T>>::insert(kitty_id, kitty);
-			<KittiesCount<T>>::put(kitty_id + 1.into());
+			Self::insert_kitty(sender, kitty_id, kitty);
+			
+			// <Kitties<T>>::insert(kitty_id, kitty);
+			// <KittiesCount<T>>::put(kitty_id + 1.into());
 
-			// Store the ownership information
-			let user_kitties_id = Self::owned_kitties_count(&sender);
-			<OwnedKitties<T>>::insert((sender.clone(), user_kitties_id), kitty_id);
-			<OwnedKittiesCount<T>>::insert(sender, user_kitties_id + 1.into());
+			// // Store the ownership information
+			// let user_kitties_id = Self::owned_kitties_count(&sender);
+			// <OwnedKitties<T>>::insert((sender.clone(), user_kitties_id), kitty_id);
+			// <OwnedKittiesCount<T>>::insert(sender, user_kitties_id + 1.into());
 		}
 
 		/// Breed kitties
@@ -65,24 +67,22 @@ decl_module! {
 
 		/// transfer kitties
 		pub fn transfer(origin, from: T::AccountId, to: T::AccountId, kitty_id: T::KittyIndex) {
-			let sender = ensure_signed(origin)?;
+            let sender = ensure_signed(origin)?;
 
-			ensure!(from != to, "from is not equal to");
-			// let kitty_index = Self::owned_kitties(from, kitty_id);
-			// if kitty_index != kitty_id {
-			// 	return Err("'from' account does not own this kitty_id");
-			// }
+			ensure!(from != to, "Can't transfer to oneself");
 
-			let kitty = Self::kitty(kitty_id);  
+            let kitty = Self::kitty(kitty_id);  
 			ensure!(kitty.is_some(), "kitty does not exist");
 
 			// from remove: kitty, from_kitty_count-1
-			let user_kitties_id = Self::owned_kitties_count(from.clone());
-			<OwnedKitties<T>>::insert((from.clone(), user_kitties_id), kitty_id);
-			<OwnedKittiesCount<T>>::insert(from, user_kitties_id - 1.into());
+			let from_kitties_id = Self::owned_kitties_count(&from);
+			<OwnedKitties<T>>::remove((from.clone(), from_kitties_id));
+			<OwnedKittiesCount<T>>::insert(from, from_kitties_id);
 
 			// to add kitty
-			//Self::insert_kitty(to, kitty_id, kitty.clone());
+			let to_kitties_id = Self::owned_kitties_count(&to);
+			<OwnedKitties<T>>::insert((to.clone(), to_kitties_id), kitty_id);
+			<OwnedKittiesCount<T>>::insert(to, to_kitties_id + 1.into());
 		}
 	}
 }

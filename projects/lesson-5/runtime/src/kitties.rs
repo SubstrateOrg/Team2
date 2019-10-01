@@ -73,6 +73,30 @@ decl_module! {
 			<OwnedKitties<T>>::remove(&sender, kitty_id);
 		}
 
+		// 设定价格
+		pub fn set_price(origin, to: T::AccountId, kitty_id: T::KittyIndex) {
+			// TODO
+			// let sender = ensure_signed(origin)?;
+			// let kitty = <OwnedKitties<T>>::get(&(sender.clone(), Some(kitty_id)));
+			// ensure!(kitty.is_some(), "the kitty is not belong to you!");
+		}
+
+		//  买猫
+		pub fn buy_kitty(origin, to: T::AccountId, kitty_id: T::KittyIndex) {
+			// TODO
+			// 价格0 为非卖品
+			// check balance
+			// transfer
+			// balance - price ， balance + price
+		}
+
+		// 卖猫
+		pub fn sell_kitty(origin, to: T::AccountId, kitty_id: T::KittyIndex) {
+			// TODO
+			// TODO
+			// TODO
+		}
+
 	}
 }
 

@@ -1,16 +1,16 @@
-use support::{decl_module, decl_storage, ensure, StorageValue, StorageMap, dispatch::Result, Parameter};
+use support::{decl_module, decl_storage, ensure, StorageValue, StorageMap, dispatch::Result, Parameter, traits::Currency};
 use sr_primitives::traits::{SimpleArithmetic, Bounded, Member};
 use codec::{Encode, Decode};
 use runtime_io::blake2_128;
 use system::ensure_signed;
 use rstd::result;
 
-pub trait Trait: system::Trait {
+pub trait Trait: balances::Trait {
 	type KittyIndex: Parameter + Member + SimpleArithmetic + Bounded + Default + Copy;
 }
 
 #[derive(Encode, Decode)]
-pub struct Kitty(pub [u8; 16]);
+pub struct Kitty<Balance>(pub [u8; 16], Balance);
 
 #[cfg_attr(feature = "std", derive(Debug, PartialEq, Eq))]
 #[derive(Encode, Decode)]
@@ -22,7 +22,7 @@ pub struct KittyLinkedItem<T: Trait> {
 decl_storage! {
 	trait Store for Module<T: Trait> as Kitties {
 		/// Stores all the kitties, key is the kitty id / index
-		pub Kitties get(kitty): map T::KittyIndex => Option<Kitty>;
+		pub Kitties get(kitty): map T::KittyIndex => Option<Kitty<T::Balance>>;
 		/// Stores the total number of kitties. i.e. the next kitty index
 		pub KittiesCount get(kitties_count): T::KittyIndex;
 
@@ -41,7 +41,7 @@ decl_module! {
 			let dna = Self::random_value(&sender);
 
 			// Create and store kitty
-			let kitty = Kitty(dna);
+			let kitty = Kitty(dna, 0.into());
 			Self::insert_kitty(&sender, kitty_id, kitty);
 		}
 
@@ -52,72 +52,86 @@ decl_module! {
 			Self::do_breed(&sender, kitty_id_1, kitty_id_2)?;
 		}
 
-		// 作业：实现 transfer(origin, to: T::AccountId, kitty_id: T::KittyIndex)
-		// 使用 ensure! 来保证只有主人才有权限调用 transfer
-		// 使用 OwnedKitties::append 和 OwnedKitties::remove 来修改小猫的主人
+		pub fn transfer(origin, to: T::AccountId, kitty_id: T::KittyIndex) -> Result{
+			let sender = ensure_signed(origin)?;
+
+			Self::do_transfer(&sender, to, kitty_id)
+		}
+
+		pub fn set_price(origin, kitty_id: T::KittyIndex, price: T::Balance) -> Result{
+			let sender = ensure_signed(origin)?;
+
+			Self::do_set_price(&sender, kitty_id, price)
+		}
+
+		pub fn buy_kitty(origin, from: T::AccountId, kitty_id: T::KittyIndex) -> Result{
+			let sender = ensure_signed(origin)?;
+
+			Self::do_buy_kitty(&sender, from, kitty_id)
+		}
 	}
 }
 
 impl<T: Trait> OwnedKitties<T> {
 	fn read_head(account: &T::AccountId) -> KittyLinkedItem<T> {
- 		Self::read(account, None)
- 	}
+		Self::read(account, None)
+	}
 
 	fn write_head(account: &T::AccountId, item: KittyLinkedItem<T>) {
- 		Self::write(account, None, item);
- 	}
+		Self::write(account, None, item);
+	}
 
 	fn read(account: &T::AccountId, key: Option<T::KittyIndex>) -> KittyLinkedItem<T> {
- 		<OwnedKitties<T>>::get(&(account.clone(), key)).unwrap_or_else(|| KittyLinkedItem {
- 			prev: None,
- 			next: None,
- 		})
- 	}
+		<OwnedKitties<T>>::get(&(account.clone(), key)).unwrap_or_else(|| KittyLinkedItem {
+			prev: None,
+			next: None,
+		})
+	}
 
 	fn write(account: &T::AccountId, key: Option<T::KittyIndex>, item: KittyLinkedItem<T>) {
- 		<OwnedKitties<T>>::insert(&(account.clone(), key), item);
- 	}
+		<OwnedKitties<T>>::insert(&(account.clone(), key), item);
+	}
 
 	pub fn append(account: &T::AccountId, kitty_id: T::KittyIndex) {
 		let head = Self::read_head(account);
 		let new_head = KittyLinkedItem {
- 			prev: Some(kitty_id),
- 			next: head.next,
- 		};
+			prev: Some(kitty_id),
+			next: head.next,
+		};
 
 		Self::write_head(account, new_head);
 
 		let prev = Self::read(account, head.prev);
 		let new_prev = KittyLinkedItem {
- 			prev: prev.prev,
- 			next: Some(kitty_id),
- 		};
+			prev: prev.prev,
+			next: Some(kitty_id),
+		};
 		Self::write(account, head.prev, new_prev);
 
 		let item = KittyLinkedItem {
- 			prev: head.prev,
- 			next: None,
- 		};
- 		Self::write(account, Some(kitty_id), item);
+			prev: head.prev,
+			next: None,
+		};
+		Self::write(account, Some(kitty_id), item);
 	}
 
 	pub fn remove(account: &T::AccountId, kitty_id: T::KittyIndex) {
 		if let Some(item) = <OwnedKitties<T>>::take(&(account.clone(), Some(kitty_id))) {
 			let prev = Self::read(account, item.prev);
 			let new_prev = KittyLinkedItem {
- 				prev: prev.prev,
- 				next: item.next,
- 			};
+				prev: prev.prev,
+				next: item.next,
+			};
 
 			Self::write(account, item.prev, new_prev);
 
 			let next = Self::read(account, item.next);
- 			let new_next = KittyLinkedItem {
- 				prev: item.prev,
- 				next: next.next,
- 			};
+			let new_next = KittyLinkedItem {
+				prev: item.prev,
+				next: next.next,
+			};
 
-  			Self::write(account, item.next, new_next);
+			Self::write(account, item.next, new_next);
 		}
 	}
 }
@@ -141,15 +155,51 @@ impl<T: Trait> Module<T> {
 	}
 
 	fn insert_owned_kitty(owner: &T::AccountId, kitty_id: T::KittyIndex) {
-		// 作业：调用 OwnedKitties::append 完成实现
-  	}
+		<OwnedKitties<T>>::append(owner, kitty_id);
+	}
 
-	fn insert_kitty(owner: &T::AccountId, kitty_id: T::KittyIndex, kitty: Kitty) {
+	fn insert_kitty(owner: &T::AccountId, kitty_id: T::KittyIndex, kitty: Kitty<T::Balance>) {
 		// Create and store kitty
 		<Kitties<T>>::insert(kitty_id, kitty);
 		<KittiesCount<T>>::put(kitty_id + 1.into());
 
 		Self::insert_owned_kitty(owner, kitty_id);
+	}
+
+	fn do_buy_kitty(sender: &T::AccountId, from: T::AccountId, kitty_id: T::KittyIndex) -> Result {
+		let this_one = <OwnedKitties<T>>::get(&(from.clone(), Some(kitty_id)));
+		ensure!(this_one.is_some(), "This kitty is not belong to he/she!");
+
+		let mut kitty = Self::kitty(kitty_id).unwrap();
+ 		ensure!(kitty.1 != 0.into(), "This one is not on sale!");
+
+		<balances::Module<T> as Currency<_>>::transfer(&sender, &from, kitty.1)?;
+		Self::do_transfer(&from, sender.clone(), kitty_id)?;
+
+		kitty.1 = 0.into();
+		<Kitties<T>>::insert(kitty_id, kitty);
+
+		Ok(())
+	}
+
+	fn do_set_price(sender: &T::AccountId, kitty_id: T::KittyIndex, price: T::Balance) ->Result {
+		ensure!(price >= 0.into(), "Price must be greater or equle than zero!");
+		let this_one = <OwnedKitties<T>>::get(&(sender.clone(), Some(kitty_id)));
+		ensure!(this_one.is_some(), "This kitty is not belong to you!");
+
+		<Kitties<T>>::mutate(kitty_id, |kitty| kitty.as_mut().unwrap().1 = price);
+
+		Ok(())
+	}
+
+	fn do_transfer(sender : &T::AccountId, to: T::AccountId, kitty_id: T::KittyIndex) -> Result {
+		let this_one = <OwnedKitties<T>>::get(&(sender.clone(), Some(kitty_id)));
+		ensure!(this_one.is_some(), "This kitty is not belong to you!");
+
+		<OwnedKitties<T>>::append(&to, kitty_id);
+		<OwnedKitties<T>>::remove(&sender, kitty_id);
+
+		Ok(())
 	}
 
 	fn do_breed(sender: &T::AccountId, kitty_id_1: T::KittyIndex, kitty_id_2: T::KittyIndex) -> Result {
@@ -174,7 +224,7 @@ impl<T: Trait> Module<T> {
 			new_dna[i] = combine_dna(kitty1_dna[i], kitty2_dna[i], selector[i]);
 		}
 
-		Self::insert_kitty(sender, kitty_id, Kitty(new_dna));
+		Self::insert_kitty(sender, kitty_id, Kitty(new_dna, 0.into()));
 
 		Ok(())
 	}
@@ -242,110 +292,110 @@ mod tests {
 			OwnedKittiesTest::append(&0, 1);
 
 			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
- 				prev: Some(1),
- 				next: Some(1),
- 			}));
+				prev: Some(1),
+				next: Some(1),
+			}));
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), Some(KittyLinkedItem {
- 				prev: None,
- 				next: None,
- 			}));
+			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), Some(KittyLinkedItem {
+				prev: None,
+				next: None,
+			}));
 
 			OwnedKittiesTest::append(&0, 2);
 
 			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
- 				prev: Some(2),
- 				next: Some(1),
- 			}));
+				prev: Some(2),
+				next: Some(1),
+			}));
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), Some(KittyLinkedItem {
- 				prev: None,
- 				next: Some(2),
- 			}));
+			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), Some(KittyLinkedItem {
+				prev: None,
+				next: Some(2),
+			}));
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), Some(KittyLinkedItem {
- 				prev: Some(1),
- 				next: None,
- 			}));
+			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), Some(KittyLinkedItem {
+				prev: Some(1),
+				next: None,
+			}));
 
 			OwnedKittiesTest::append(&0, 3);
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
- 				prev: Some(3),
- 				next: Some(1),
- 			}));
+			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
+				prev: Some(3),
+				next: Some(1),
+			}));
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), Some(KittyLinkedItem {
- 				prev: None,
- 				next: Some(2),
- 			}));
+			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), Some(KittyLinkedItem {
+				prev: None,
+				next: Some(2),
+			}));
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), Some(KittyLinkedItem {
- 				prev: Some(1),
- 				next: Some(3),
- 			}));
+			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), Some(KittyLinkedItem {
+				prev: Some(1),
+				next: Some(3),
+			}));
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(3))), Some(KittyLinkedItem {
- 				prev: Some(2),
- 				next: None,
- 			}));
+			assert_eq!(OwnedKittiesTest::get(&(0, Some(3))), Some(KittyLinkedItem {
+				prev: Some(2),
+				next: None,
+			}));
 		});
 	}
 
 	#[test]
- 	fn owned_kitties_can_remove_values() {
- 		with_externalities(&mut new_test_ext(), || {
+	 fn owned_kitties_can_remove_values() {
+		 with_externalities(&mut new_test_ext(), || {
 			OwnedKittiesTest::append(&0, 1);
- 			OwnedKittiesTest::append(&0, 2);
- 			OwnedKittiesTest::append(&0, 3);
+			OwnedKittiesTest::append(&0, 2);
+			OwnedKittiesTest::append(&0, 3);
 
 			OwnedKittiesTest::remove(&0, 2);
 
 			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
- 				prev: Some(3),
- 				next: Some(1),
- 			}));
+				prev: Some(3),
+				next: Some(1),
+			}));
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), Some(KittyLinkedItem {
- 				prev: None,
- 				next: Some(3),
- 			}));
+			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), Some(KittyLinkedItem {
+				prev: None,
+				next: Some(3),
+			}));
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), None);
+			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), None);
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(3))), Some(KittyLinkedItem {
- 				prev: Some(1),
- 				next: None,
- 			}));
+			assert_eq!(OwnedKittiesTest::get(&(0, Some(3))), Some(KittyLinkedItem {
+				prev: Some(1),
+				next: None,
+			}));
 
 			OwnedKittiesTest::remove(&0, 1);
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
- 				prev: Some(3),
- 				next: Some(3),
- 			}));
+			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
+				prev: Some(3),
+				next: Some(3),
+			}));
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), None);
+			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), None);
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), None);
+			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), None);
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(3))), Some(KittyLinkedItem {
- 				prev: None,
- 				next: None,
- 			}));
+			assert_eq!(OwnedKittiesTest::get(&(0, Some(3))), Some(KittyLinkedItem {
+				prev: None,
+				next: None,
+			}));
 
 			OwnedKittiesTest::remove(&0, 3);
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
- 				prev: None,
- 				next: None,
- 			}));
+			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
+				prev: None,
+				next: None,
+			}));
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), None);
+			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), None);
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), None);
+			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), None);
 
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), None);
+			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), None);
 		});
 	}
 }

@@ -74,11 +74,15 @@ decl_module! {
 		}
 
 		// 设定价格
-		pub fn set_price(origin, to: T::AccountId, kitty_id: T::KittyIndex) {
-			// TODO
-			// let sender = ensure_signed(origin)?;
-			// let kitty = <OwnedKitties<T>>::get(&(sender.clone(), Some(kitty_id)));
-			// ensure!(kitty.is_some(), "the kitty is not belong to you!");
+		pub fn set_price(origin, to: T::AccountId, kitty_id: T::KittyIndex, price: T::Balance) {
+			let sender = ensure_signed(origin)?;
+			let kitty = <OwnedKitties<T>>::get(&(sender.clone(), Some(kitty_id)));
+			ensure!(kitty.is_some(), "the kitty is not belong to you!");
+
+			// ensure!(price>0, "the kitty price must > 0!");
+
+			let mut _kitty = <Kitties<T>>::get(&kitty_id);
+			_kitty.unwrap().price = price;
 		}
 
 		//  买猫

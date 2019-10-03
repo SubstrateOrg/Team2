@@ -63,6 +63,19 @@ decl_module! {
 			<OwnedKitties<T>>::remove(&sender, kitty_id);
 			<OwnedKitties<T>>::append(&to, kitty_id);
 		}
+
+		// make order 设计
+		//side: 0 -- buy, 1 -- sell, 其他预留，暂时非法 
+		//pub fn make_order(origin, kitty_id: T::KittyIndex, price: BalanceOf<T>, side: u8) {
+			// 1. kitty_id 校验
+
+			// 2. side 校验
+
+			// 3. price 检查
+
+			// 4. order storage
+
+		//}
 	}
 }
 

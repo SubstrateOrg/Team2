@@ -1,16 +1,19 @@
-use support::{decl_module, decl_storage, ensure, StorageValue, StorageMap, dispatch::Result, Parameter};
-use sr_primitives::traits::{SimpleArithmetic, Bounded, Member};
+use support::{decl_module, decl_storage, ensure, StorageValue, StorageMap, dispatch::Result, Parameter, traits::Currency};
+use sr_primitives::traits::{SimpleArithmetic, Bounded, Member, Zero};
 use codec::{Encode, Decode};
 use runtime_io::blake2_128;
 use system::ensure_signed;
 use rstd::result;
 
-pub trait Trait: system::Trait {
+pub trait Trait: balances::Trait {
 	type KittyIndex: Parameter + Member + SimpleArithmetic + Bounded + Default + Copy;
 }
 
 #[derive(Encode, Decode)]
-pub struct Kitty(pub [u8; 16]);
+pub struct Kitty<T: Trait> {
+    pub dna: [u8; 16],
+    pub price: T::Balance,
+}
 
 #[cfg_attr(feature = "std", derive(Debug, PartialEq, Eq))]
 #[derive(Encode, Decode)]
@@ -22,7 +25,7 @@ pub struct KittyLinkedItem<T: Trait> {
 decl_storage! {
 	trait Store for Module<T: Trait> as Kitties {
 		/// Stores all the kitties, key is the kitty id / index
-		pub Kitties get(kitty): map T::KittyIndex => Option<Kitty>;
+		pub Kitties get(kitty): map T::KittyIndex => Option<Kitty<T>>;
 		/// Stores the total number of kitties. i.e. the next kitty index
 		pub KittiesCount get(kitties_count): T::KittyIndex;
 
@@ -41,7 +44,10 @@ decl_module! {
 			let dna = Self::random_value(&sender);
 
 			// Create and store kitty
-			let kitty = Kitty(dna);
+			let kitty = Kitty {
+                dna: dna, 
+                price: Zero::zero()
+            };
 			Self::insert_kitty(&sender, kitty_id, kitty);
 		}
 
@@ -55,6 +61,41 @@ decl_module! {
 		// 作业：实现 transfer(origin, to: T::AccountId, kitty_id: T::KittyIndex)
 		// 使用 ensure! 来保证只有主人才有权限调用 transfer
 		// 使用 OwnedKitties::append 和 OwnedKitties::remove 来修改小猫的主人
+        pub fn transfer(origin, to: T::AccountId, kitty_id: T::KittyIndex) {
+            let sender = ensure_signed(origin)?;
+
+            Self::do_transfer(&sender, to, kitty_id)?;
+        }
+
+        /// Set price
+        pub fn set_price(origin, kitty_id: T::KittyIndex, price: T::Balance) {
+            let sender = ensure_signed(origin)?;
+
+            ensure!(<Kitties<T>>::exists(kitty_id), "Not exist kitty_id");
+
+            //check kitty ownership
+            let kitty = <OwnedKitties<T>>::read(&sender, Some(kitty_id));
+            ensure!(kitty.prev != None, "Not own this kitty");
+
+            let mut kitty = Self::kitty(kitty_id).unwrap();
+            kitty.price = price;
+            <Kitties<T>>::insert(kitty_id, kitty);
+        }
+
+        /// Buy kitty
+        pub fn buy_kitty(origin, owner: T::AccountId, kitty_id: T::KittyIndex) {
+            let sender = ensure_signed(origin)?;
+
+            ensure!(<Kitties<T>>::exists(kitty_id), "Not exist kitty_id");
+            
+            //check kitty ownership
+            let kitty = <OwnedKitties<T>>::read(&owner, Some(kitty_id));
+            ensure!(kitty.prev != None, "Not own this kitty");
+
+            <balances::Module<T> as Currency<_>>::transfer(&sender, &owner, Self::kitty(kitty_id).unwrap().price)?;
+
+            Self::do_transfer(&owner, sender, kitty_id)?;
+        }
 	}
 }
 
@@ -142,9 +183,10 @@ impl<T: Trait> Module<T> {
 
 	fn insert_owned_kitty(owner: &T::AccountId, kitty_id: T::KittyIndex) {
 		// 作业：调用 OwnedKitties::append 完成实现
+        <OwnedKitties<T>>::append(owner, kitty_id);
   	}
 
-	fn insert_kitty(owner: &T::AccountId, kitty_id: T::KittyIndex, kitty: Kitty) {
+	fn insert_kitty(owner: &T::AccountId, kitty_id: T::KittyIndex, kitty: Kitty<T>) {
 		// Create and store kitty
 		<Kitties<T>>::insert(kitty_id, kitty);
 		<KittiesCount<T>>::put(kitty_id + 1.into());
@@ -162,8 +204,8 @@ impl<T: Trait> Module<T> {
 
 		let kitty_id = Self::next_kitty_id()?;
 
-		let kitty1_dna = kitty1.unwrap().0;
-		let kitty2_dna = kitty2.unwrap().0;
+        let kitty1_dna = kitty1.unwrap().dna;
+		let kitty2_dna = kitty2.unwrap().dna;
 
 		// Generate a random 128bit value
 		let selector = Self::random_value(&sender);
@@ -174,178 +216,21 @@ impl<T: Trait> Module<T> {
 			new_dna[i] = combine_dna(kitty1_dna[i], kitty2_dna[i], selector[i]);
 		}
 
-		Self::insert_kitty(sender, kitty_id, Kitty(new_dna));
+		Self::insert_kitty(sender, kitty_id, Kitty{dna: new_dna, price: Zero::zero()});
 
 		Ok(())
 	}
+
+    fn do_transfer(from: &T::AccountId, to: T::AccountId, kitty_id: T::KittyIndex) -> Result {
+        ensure!(<Kitties<T>>::exists(kitty_id), "Not exist kitty_id");
+
+        let kitty = <OwnedKitties<T>>::read(&from, Some(kitty_id));
+        ensure!(kitty.prev != None, "Not own this kitty");
+
+        <OwnedKitties<T>>::remove(&from, kitty_id);
+        <OwnedKitties<T>>::append(&to, kitty_id);
+
+        Ok(())
+    }
 }
 
-/// tests for this module
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	use runtime_io::with_externalities;
-	use primitives::{H256, Blake2Hasher};
-	use support::{impl_outer_origin, parameter_types};
-	use sr_primitives::{traits::{BlakeTwo256, IdentityLookup}, testing::Header};
-	use sr_primitives::weights::Weight;
-	use sr_primitives::Perbill;
-
-	impl_outer_origin! {
-		pub enum Origin for Test {}
-	}
-
-	// For testing the module, we construct most of a mock runtime. This means
-	// first constructing a configuration type (`Test`) which `impl`s each of the
-	// configuration traits of modules we want to use.
-	#[derive(Clone, Eq, PartialEq, Debug)]
-	pub struct Test;
-	parameter_types! {
-		pub const BlockHashCount: u64 = 250;
-		pub const MaximumBlockWeight: Weight = 1024;
-		pub const MaximumBlockLength: u32 = 2 * 1024;
-		pub const AvailableBlockRatio: Perbill = Perbill::from_percent(75);
-	}
-	impl system::Trait for Test {
-		type Origin = Origin;
-		type Call = ();
-		type Index = u64;
-		type BlockNumber = u64;
-		type Hash = H256;
-		type Hashing = BlakeTwo256;
-		type AccountId = u64;
-		type Lookup = IdentityLookup<Self::AccountId>;
-		type Header = Header;
-		type WeightMultiplierUpdate = ();
-		type Event = ();
-		type BlockHashCount = BlockHashCount;
-		type MaximumBlockWeight = MaximumBlockWeight;
-		type MaximumBlockLength = MaximumBlockLength;
-		type AvailableBlockRatio = AvailableBlockRatio;
-		type Version = ();
-	}
-	impl Trait for Test {
-		type KittyIndex = u32;
-	}
-	type OwnedKittiesTest = OwnedKitties<Test>;
-
-	// This function basically just builds a genesis storage key/value store according to
-	// our desired mockup.
-	fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
-		system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
-	}
-
-	#[test]
-	fn owned_kitties_can_append_values() {
-		with_externalities(&mut new_test_ext(), || {
-			OwnedKittiesTest::append(&0, 1);
-
-			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
- 				prev: Some(1),
- 				next: Some(1),
- 			}));
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), Some(KittyLinkedItem {
- 				prev: None,
- 				next: None,
- 			}));
-
-			OwnedKittiesTest::append(&0, 2);
-
-			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
- 				prev: Some(2),
- 				next: Some(1),
- 			}));
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), Some(KittyLinkedItem {
- 				prev: None,
- 				next: Some(2),
- 			}));
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), Some(KittyLinkedItem {
- 				prev: Some(1),
- 				next: None,
- 			}));
-
-			OwnedKittiesTest::append(&0, 3);
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
- 				prev: Some(3),
- 				next: Some(1),
- 			}));
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), Some(KittyLinkedItem {
- 				prev: None,
- 				next: Some(2),
- 			}));
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), Some(KittyLinkedItem {
- 				prev: Some(1),
- 				next: Some(3),
- 			}));
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(3))), Some(KittyLinkedItem {
- 				prev: Some(2),
- 				next: None,
- 			}));
-		});
-	}
-
-	#[test]
- 	fn owned_kitties_can_remove_values() {
- 		with_externalities(&mut new_test_ext(), || {
-			OwnedKittiesTest::append(&0, 1);
- 			OwnedKittiesTest::append(&0, 2);
- 			OwnedKittiesTest::append(&0, 3);
-
-			OwnedKittiesTest::remove(&0, 2);
-
-			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
- 				prev: Some(3),
- 				next: Some(1),
- 			}));
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), Some(KittyLinkedItem {
- 				prev: None,
- 				next: Some(3),
- 			}));
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), None);
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(3))), Some(KittyLinkedItem {
- 				prev: Some(1),
- 				next: None,
- 			}));
-
-			OwnedKittiesTest::remove(&0, 1);
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
- 				prev: Some(3),
- 				next: Some(3),
- 			}));
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), None);
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), None);
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(3))), Some(KittyLinkedItem {
- 				prev: None,
- 				next: None,
- 			}));
-
-			OwnedKittiesTest::remove(&0, 3);
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
- 				prev: None,
- 				next: None,
- 			}));
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), None);
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), None);
-
-  			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), None);
-		});
-	}
-}

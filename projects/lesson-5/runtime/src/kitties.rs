@@ -18,6 +18,12 @@ pub struct KittyLinkedItem<T: Trait> {
 	pub prev: Option<T::KittyIndex>,
 	pub next: Option<T::KittyIndex>,
 }
+#[cfg_attr(feature = "std", derive(Debug, PartialEq, Eq))]
+#[derive(Encode, Decode)]
+pub struct KittyInSale<T: Trait> {
+	pub owned: Option<T::AccountId>,
+	pub price: u64,
+}
 
 decl_storage! {
 	trait Store for Module<T: Trait> as Kitties {
@@ -27,6 +33,8 @@ decl_storage! {
 		pub KittiesCount get(kitties_count): T::KittyIndex;
 
 		pub OwnedKitties get(owned_kitties): map (T::AccountId, Option<T::KittyIndex>) => Option<KittyLinkedItem<T>>;
+
+		pub KittiesInSale get(kitty_price): map T::KittyIndex => Option<KittyInSale<T>>;
 	}
 }
 
@@ -50,6 +58,34 @@ decl_module! {
 			let sender = ensure_signed(origin)?;
 
 			Self::do_breed(&sender, kitty_id_1, kitty_id_2)?;
+		}
+
+		/// Transfer kitties
+		pub fn transfer(origin, to: T::AccountId, kitty_id: T::KittyIndex) {
+			let sender = ensure_signed(origin)?;
+
+			Self::do_transfer(&sender, &to, kitty_id)?;
+		}
+
+		/// Set kitties price, for sale
+		pub fn set_price(origin, kitty_id: T::KittyIndex, price: u64) {
+			let sender = ensure_signed(origin)?;
+
+			Self::do_set_price(sender, kitty_id, price)?;
+		}
+
+		/// Remove kitties price, not for sale
+		pub fn remove_price(origin, kitty_id: T::KittyIndex) {
+			let sender = ensure_signed(origin)?;
+
+			Self::do_remove_price(sender, kitty_id)?;
+		}
+
+		/// Buy kitties on sale
+		pub fn buy(origin, kitty_id: T::KittyIndex) {
+			let sender = ensure_signed(origin)?;
+
+			Self::do_buy(&sender, kitty_id)?;
 		}
 
 		// 作业：实现 transfer(origin, to: T::AccountId, kitty_id: T::KittyIndex)
@@ -79,25 +115,43 @@ impl<T: Trait> OwnedKitties<T> {
  	}
 
 	pub fn append(account: &T::AccountId, kitty_id: T::KittyIndex) {
+		//首次添加：得到None，None
+		//第二次添加：得到上次的kitty_id，上次的kitty_id（头kitty_id）
+		
 		let head = Self::read_head(account);
 		let new_head = KittyLinkedItem {
  			prev: Some(kitty_id),
- 			next: head.next,
+ 			next: head.next,//加入之前的链表头，首次添加：None
  		};
 
+		//新加入的kitty成为链表头
+		//链表头，最后一个，第一个
 		Self::write_head(account, new_head);
+		//首次添加：（Alice，None）-》{kitty_id, None}
+		//第二次添加：（Alice，None）-》{本次kitty_id，上次kitty_id}
 
+		//首次添加：得到new_head，{kitty_id, None}
+		//第二次添加：得到(None,None),(上个，None)
 		let prev = Self::read(account, head.prev);
 		let new_prev = KittyLinkedItem {
- 			prev: prev.prev,
+ 			prev: prev.prev,//首次添加，为kitty_id。第二次添加，上一个
  			next: Some(kitty_id),
  		};
+		//首次添加：把头替换成（Alice，None）-》{kitty_id, kitty_id}
+		//第二次添加：(Alice,上次kitty_id) -》{None,本次kitty_id}
+		//链表中：上一个，下一个
 		Self::write(account, head.prev, new_prev);
 
+		//首次添加，None，None
+		//第二次添加，上次的id，None
 		let item = KittyLinkedItem {
  			prev: head.prev,
  			next: None,
  		};
+
+		//首次添加：把头替换成（Alice，kitty_id）-》{None, None}
+		//第二次添加：（Alice，kitty_id）-》{上次kitty_id, None}
+		//链表尾：上一个，None
  		Self::write(account, Some(kitty_id), item);
 	}
 
@@ -142,6 +196,7 @@ impl<T: Trait> Module<T> {
 
 	fn insert_owned_kitty(owner: &T::AccountId, kitty_id: T::KittyIndex) {
 		// 作业：调用 OwnedKitties::append 完成实现
+		<OwnedKitties<T>>::append(owner, kitty_id);
   	}
 
 	fn insert_kitty(owner: &T::AccountId, kitty_id: T::KittyIndex, kitty: Kitty) {
@@ -175,6 +230,71 @@ impl<T: Trait> Module<T> {
 		}
 
 		Self::insert_kitty(sender, kitty_id, Kitty(new_dna));
+
+		Ok(())
+	}
+
+	fn do_transfer(sender: &T::AccountId, to: &T::AccountId, kitty_id: T::KittyIndex ) -> Result {
+		let kitty = Self::kitty(kitty_id);
+		ensure!(kitty.is_some(), "Invalid kitty_id");
+
+		let owned = <OwnedKitties<T>>::read(sender, Some(kitty_id));
+
+		ensure!(owned.prev.is_some() || owned.next.is_some(), "You didn't owned this kitty");
+
+		// 使用 OwnedKitties::append 和 OwnedKitties::remove 来修改小猫的主人
+		<OwnedKitties<T>>::append(&to, kitty_id);
+
+		<OwnedKitties<T>>::remove(sender, kitty_id);
+
+		//转移后删除价格，不在售
+		<KittiesInSale<T>>::remove(kitty_id);
+
+		Ok(())
+	}
+
+	fn do_set_price(sender: T::AccountId, kitty_id: T::KittyIndex, price: u64) -> Result {
+		let kitty = Self::kitty(kitty_id);
+		ensure!(kitty.is_some(), "Invalid kitty_id");
+
+		let owned = <OwnedKitties<T>>::read(&sender, Some(kitty_id));
+
+		ensure!(owned.prev.is_some() || owned.next.is_some(), "You didn't owned this kitty");
+
+		let in_sale = KittyInSale {
+			owned: Some(sender),
+			price: price
+		};
+		<KittiesInSale<T>>::insert(kitty_id, in_sale);
+
+		Ok(())
+	}
+
+	fn do_remove_price(sender: T::AccountId, kitty_id: T::KittyIndex) -> Result{
+		let kitty = Self::kitty(kitty_id);
+		ensure!(kitty.is_some(), "Invalid kitty_id");
+
+		let owned = <OwnedKitties<T>>::read(&sender, Some(kitty_id));
+
+		ensure!(owned.prev.is_some() || owned.next.is_some(), "You didn't owned this kitty");
+
+		<KittiesInSale<T>>::remove(kitty_id);
+
+		Ok(())
+	}
+
+	fn do_buy(sender: &T::AccountId, kitty_id: T::KittyIndex) -> Result {
+		let kitty = Self::kitty(kitty_id);
+		ensure!(kitty.is_some(), "Invalid kitty_id");
+
+		let owned = <OwnedKitties<T>>::read(&sender, Some(kitty_id));
+
+		ensure!(owned.prev.is_none() || owned.next.is_none(), "You already owned this kitty");
+
+		let in_sale = Self::kitty_price(kitty_id);
+		ensure!(in_sale.is_some(), "Kitty not in sale");
+
+		Self::do_transfer(&in_sale.unwrap().owned.unwrap(), &sender, kitty_id)?;
 
 		Ok(())
 	}

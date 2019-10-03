@@ -1,4 +1,4 @@
-use support::{decl_module, decl_storage, ensure, StorageValue, StorageMap, dispatch::Result, Parameter};
+use support::{decl_module, decl_storage, ensure, StorageValue, StorageMap, dispatch::Result, Parameter };
 use sr_primitives::traits::{SimpleArithmetic, Bounded, Member, Zero};
 use codec::{Encode, Decode};
 use runtime_io::blake2_128;
@@ -33,7 +33,9 @@ decl_storage! {
 		pub KittiesCount get(kitties_count): T::KittyIndex;
 
 		pub OwnedKitties get(owned_kitties): map (T::AccountId, Option<T::KittyIndex>) => Option<KittyLinkedItem<T>>;
+		KittyOwner get(owner_of): map T::KittyIndex => Option<T::AccountId>; // lesson2 kitty的猫主人
 	}
+
 }
 
 decl_module! {
@@ -63,7 +65,7 @@ decl_module! {
 		// 作业：实现 transfer(origin, to: T::AccountId, kitty_id: T::KittyIndex)
 		// 使用 ensure! 来保证只有主人才有权限调用 transfer
 		// 使用 OwnedKitties::append 和 OwnedKitties::remove 来修改小猫的主人
-		pub fn transfer(origin, to: T::AccountId, kitty_id: T::KittyIndex) {
+		pub fn transfer_kitty(origin, to: T::AccountId, kitty_id: T::KittyIndex) {
 			let sender = ensure_signed(origin)?;
 
 			let kitty = <OwnedKitties<T>>::get(&(sender.clone(), Some(kitty_id)));
@@ -74,34 +76,31 @@ decl_module! {
 		}
 
 		// 设定价格
-		pub fn set_price(origin, to: T::AccountId, kitty_id: T::KittyIndex, price: T::Balance) {
+		pub fn set_price(origin, kitty_id: T::KittyIndex, price: T::Balance) {
 			let sender = ensure_signed(origin)?;
 			let kitty = <OwnedKitties<T>>::get(&(sender.clone(), Some(kitty_id)));
 			ensure!(kitty.is_some(), "the kitty is not belong to you!");
 
-			// ensure!(price>0, "the kitty price must > 0!");
+			ensure!(price > 0.into(), "the kitty price must > 0!");
 
 			let mut _kitty = <Kitties<T>>::get(&kitty_id);
 			_kitty.unwrap().price = price;
+
 		}
 
-		//  买猫
-		pub fn buy_kitty(origin, to: T::AccountId, kitty_id: T::KittyIndex) {
-			// TODO
-			// 价格0 为非卖品
-			// check balance
-			// transfer
-			// balance - price ， balance + price
-		}
+		// 买猫
+		pub fn buy_kitty(origin, kitty_id: T::KittyIndex, price: T::Balance) {
 
-		// 卖猫
-		pub fn sell_kitty(origin, to: T::AccountId, kitty_id: T::KittyIndex) {
-			// TODO
-			// TODO
-			// TODO
+			// 通过 kitty_id 找到猫主
+			// 判断猫主不是自己
+			// 判断价格
+			// 判断余额
+			// 发生金钱交易
+			// 发生小猫交易 transfer_kitty
 		}
 
 	}
+
 }
 
 impl<T: Trait> OwnedKitties<T> {

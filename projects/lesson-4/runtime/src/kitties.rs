@@ -4,6 +4,7 @@ use codec::{Encode, Decode};
 use runtime_io::blake2_128;
 use system::ensure_signed;
 use rstd::result;
+use core::convert::TryInto;
 
 pub trait Trait: system::Trait {
 	type KittyIndex: Parameter + SimpleArithmetic + Bounded + Default + Copy;
@@ -40,18 +41,21 @@ decl_module! {
 			}
 
 			// Generate a random 128bit value
-			let payload = (<system::Module<T>>::random_seed(), &sender, <system::Module<T>>::extrinsic_index(), <system::Module<T>>::block_number());
-			let dna = payload.using_encoded(blake2_128);
+			// let payload = (<system::Module<T>>::random_seed(), &sender, <system::Module<T>>::extrinsic_index(), <system::Module<T>>::block_number());
+			// let dna = payload.using_encoded(blake2_128);
+			let dna = Self::random_value(&sender);
 
 			// Create and store kitty
 			let kitty = Kitty(dna);
-			<Kitties<T>>::insert(kitty_id, kitty);
-			<KittiesCount<T>>::put(kitty_id + 1.into());
+			Self::insert_kitty(sender, kitty_id, kitty);
+			
+			// <Kitties<T>>::insert(kitty_id, kitty);
+			// <KittiesCount<T>>::put(kitty_id + 1.into());
 
-			// Store the ownership information
-			let user_kitties_id = Self::owned_kitties_count(&sender);
-			<OwnedKitties<T>>::insert((sender.clone(), user_kitties_id), kitty_id);
-			<OwnedKittiesCount<T>>::insert(sender, user_kitties_id + 1.into());
+			// // Store the ownership information
+			// let user_kitties_id = Self::owned_kitties_count(&sender);
+			// <OwnedKitties<T>>::insert((sender.clone(), user_kitties_id), kitty_id);
+			// <OwnedKittiesCount<T>>::insert(sender, user_kitties_id + 1.into());
 		}
 
 		/// Breed kitties
@@ -60,7 +64,37 @@ decl_module! {
 
 			Self::do_breed(sender, kitty_id_1, kitty_id_2)?;
 		}
+
+		/// transfer kitties
+		pub fn transfer(origin, from: T::AccountId, to: T::AccountId, kitty_id: T::KittyIndex) {
+            let sender = ensure_signed(origin)?;
+
+			ensure!(from != to, "Can't transfer to oneself");
+
+            let kitty = Self::kitty(kitty_id);  
+			ensure!(kitty.is_some(), "kitty does not exist");
+
+			// from remove: kitty, from_kitty_count-1
+			let from_kitties_id = Self::owned_kitties_count(&from);
+			<OwnedKitties<T>>::remove((from.clone(), from_kitties_id));
+			<OwnedKittiesCount<T>>::insert(from, from_kitties_id);
+
+			// to add kitty
+			let to_kitties_id = Self::owned_kitties_count(&to);
+			<OwnedKitties<T>>::insert((to.clone(), to_kitties_id), kitty_id);
+			<OwnedKittiesCount<T>>::insert(to, to_kitties_id + 1.into());
+		}
 	}
+}
+
+fn to_binary_arr(number: u8) -> [u8; 8] {
+    let mut arr:[u8; 8] = [0; 8];
+    for i in 0..8 {
+        if number & (1 << i) > 0 {
+			arr[i] = 1;
+        }
+    }
+    return arr;
 }
 
 fn combine_dna(dna1: u8, dna2: u8, selector: u8) -> u8 {
@@ -69,7 +103,22 @@ fn combine_dna(dna1: u8, dna2: u8, selector: u8) -> u8 {
 	// selector.map_bits(|bit, index| if (bit == 1) { dna1 & (1 << index) } else { dna2 & (1 << index) })
 	// 注意 map_bits这个方法不存在。只要能达到同样效果，不局限算法
 	// 测试数据：dna1 = 0b11110000, dna2 = 0b11001100, selector = 0b10101010, 返回值 0b11100100
-	return dna1;
+	//u8 --> binary array
+    let dna1_arr = to_binary_arr(dna1);
+    let dna2_arr = to_binary_arr(dna2);
+    let selector_arr = to_binary_arr(selector);
+
+    let mut dna = 0u8;
+    for i in 0..8 {
+        if selector_arr[i] == 1 {
+			let value:u8 = (i << dna1_arr[i]).try_into().unwrap();
+			dna = dna + value;
+        } else {
+			let value:u8 = (i << dna2_arr[i]).try_into().unwrap();
+			dna = dna + value;
+        }
+    }
+	return dna;
 }
 
 impl<T: Trait> Module<T> {

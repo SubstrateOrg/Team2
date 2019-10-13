@@ -63,7 +63,7 @@ impl Encode for Kitty {
 //fn decode<I: Input>(input: &mut I) -> core::result::Result<Self, codec::Error>
 impl Decode for Kitty {
 	fn decode<I: Input>(input: &mut I) -> core::result::Result<Self, codec::Error> {
-		<[u8; 16] as Decode>::decode(input).map(Kitty)
+		Decode::decode(input).map(Kitty)
 	}
 }
 

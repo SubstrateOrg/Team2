@@ -3,7 +3,7 @@ use support::{
 	Parameter, traits::Currency
 };
 use sr_primitives::traits::{SimpleArithmetic, Bounded, Member};
-use codec::{Encode, Decode, Input, Output, Error};
+use codec::{Encode, Decode, Input, Output};
 use runtime_io::blake2_128;
 use system::ensure_signed;
 use rstd::result;

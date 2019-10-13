@@ -3,7 +3,7 @@ use support::{
 	Parameter, traits::Currency
 };
 use sr_primitives::traits::{SimpleArithmetic, Bounded, Member};
-use codec::{Encode, Decode};
+use codec::{Encode, Decode, Input, Output, Error};
 use runtime_io::blake2_128;
 use system::ensure_signed;
 use rstd::result;
@@ -17,8 +17,20 @@ pub trait Trait: system::Trait {
 
 type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
 
-#[derive(Encode, Decode)]
+// #[derive(Encode, Decode)]
 pub struct Kitty(pub [u8; 16]);
+
+impl Encode for Kitty {
+	fn encode_to<T: Output>(&self, dest: &mut T) {
+		dest.push(&self.0);
+	}
+}
+
+impl Decode for Kitty {
+	fn decode<I: Input>(input: &mut I) -> Result<Self, Error> {
+		<[u8; 16] as Decode>::decode(input).map(Kitty)
+	}
+}
 
 type KittyLinkedItem<T> = LinkedItem<<T as Trait>::KittyIndex>;
 type OwnedKittiesList<T> = LinkedList<OwnedKitties<T>, <T as system::Trait>::AccountId, <T as Trait>::KittyIndex>;

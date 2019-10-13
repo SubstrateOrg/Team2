@@ -1,13 +1,32 @@
 use support::{StorageMap, Parameter};
 use sr_primitives::traits::Member;
-use codec::{Encode, Decode};
+use codec::{Encode, Decode, Input, Output, Error};
 
 #[cfg_attr(feature = "std", derive(Debug, PartialEq, Eq))]
-#[derive(Encode, Decode)]
+// #[derive(Encode, Decode)]
 pub struct LinkedItem<Value> {
 	pub prev: Option<Value>,
 	pub next: Option<Value>,
 }
+
+impl<Value: Encode> Encode for LinkedItem<Value> {
+	fn encode_to<T: Output>(&self, dest: &mut T) {
+		dest.push(&self.prev);
+		dest.push(&self.next);
+	}
+}
+
+impl<Value: Decode> Decode for LinkedItem<Value> {
+	fn decode<I: Input>(input: &mut I) -> Result<Self, Error>  {			
+		let prev = <Option<Value>>::decode(input)?;		
+		let next = <Option<Value>>::decode(input)?;
+		Ok(LinkedItem {
+			prev,
+			next,
+		})
+	}
+}
+
 
 pub struct LinkedList<Storage, Key, Value>(rstd::marker::PhantomData<(Storage, Key, Value)>);
 

@@ -249,9 +249,13 @@ mod tests {
 	}
 	impl Trait for Test {
 		type KittyIndex = u32;
+		type Currency = balances::Module<Test>;
+		type Event = ();
 	}
 	type OwnedKittiesTest = OwnedKitties<Test>;
-
+	type Balances = balances::Module<Test>;
+	type KittyModule = Module<Test>;
+	
 	// This function basically just builds a genesis storage key/value store according to
 	// our desired mockup.
 	fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {

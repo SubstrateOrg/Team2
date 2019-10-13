@@ -3,7 +3,7 @@ use support::{
 	Parameter, traits::Currency
 };
 use sr_primitives::traits::{SimpleArithmetic, Bounded, Member};
-use codec::{Encode, Decode};
+use codec::{Encode, Decode, Input, Output, Error};
 use runtime_io::blake2_128;
 use system::ensure_signed;
 use rstd::result;
@@ -17,8 +17,55 @@ pub trait Trait: system::Trait {
 
 type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
 
-#[derive(Encode, Decode)]
+/*
+//srml\metadata\src\lib.rs
+use codec::{Decode, Input, Error};
+use codec::{Encode, Output};
+
+/// Newtype wrapper for support encoding functions (actual the result of the function).
+#[derive(Clone, Eq)]
+pub struct FnEncode<E>(pub fn() -> E) where E: Encode + 'static;
+
+impl<E: Encode> Encode for FnEncode<E> {
+	fn encode_to<W: Output>(&self, dest: &mut W) {
+		self.0().encode_to(dest);
+	}
+}
+
+#[cfg(feature = "std")]
+impl<B, O> Decode for DecodeDifferent<B, O> where B: 'static, O: Decode + 'static {
+	fn decode<I: Input>(input: &mut I) -> Result<Self, Error> {
+		<O>::decode(input).map(|val| {
+			DecodeDifferent::Decoded(val)
+		})
+	}
+}
+
+#[cfg(feature = "std")]
+impl Decode for RuntimeMetadataDeprecated {
+	fn decode<I: Input>(_input: &mut I) -> Result<Self, Error> {
+		Err("Decoding is not supported".into())
+	}
+}
+*/
+
+//#[derive(Encode, Decode)]  // 使用Substrate自带的encode和Decode
 pub struct Kitty(pub [u8; 16]);
+
+//fn encode_to<T: Output>(&self, dest: &mut T)
+impl Encode for Kitty {
+	fn encode_to<W: Output>(&self, dest: &mut W) {
+		//self.0().encode_to(dest);
+		dest.push(&self.0);
+	}
+}
+
+//fn decode<I: Input>(input: &mut I) -> core::result::Result<Self, codec::Error>
+impl Decode for Kitty {
+	fn decode<I: Input>(input: &mut I) -> core::result::Result<Self, codec::Error> {
+		<[u8; 16] as Decode>::decode(input).map(Kitty)
+	}
+}
 
 type KittyLinkedItem<T> = LinkedItem<<T as Trait>::KittyIndex>;
 type OwnedKittiesList<T> = LinkedList<OwnedKitties<T>, <T as system::Trait>::AccountId, <T as Trait>::KittyIndex>;

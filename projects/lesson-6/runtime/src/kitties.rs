@@ -247,10 +247,44 @@ mod tests {
 		type AvailableBlockRatio = AvailableBlockRatio;
 		type Version = ();
 	}
-	impl Trait for Test {
-		type KittyIndex = u32;
+
+	pub type Balance = u64;
+
+	parameter_types! {
+		pub const TransferFee: Balance = 0;
+		pub const CreationFee: Balance = 0;
+		pub const TransactionBaseFee: u64 = 0;
+		pub const TransactionByteFee: u64 = 0;
 	}
+
+	impl balances::Trait for Test {
+		type Balance = Balance;
+		type OnFreeBalanceZero = ();
+		type OnNewAccount = ();
+		type Event = ();
+		type TransactionPayment = ();
+		type TransferPayment = ();
+		type DustRemoval = ();
+		type ExistentialDeposit = ();
+		type TransferFee = TransferFee;
+		type CreationFee = CreationFee;
+		type TransactionBaseFee = TransactionBaseFee;
+		type TransactionByteFee = TransactionByteFee;
+		type WeightToFee = ();
+	}
+
+
+	impl Trait for Test {
+		type Event = ();
+		type KittyIndex = u32;
+		type Currency = balances::Module<Self>;
+
+	}
+	
 	type OwnedKittiesTest = OwnedKitties<Test>;
+	type OwnedKittiesListTest = OwnedKittiesList<Test>;
+    type KittyLinkedItem = super::KittyLinkedItem<Test>;
+
 
 	// This function basically just builds a genesis storage key/value store according to
 	// our desired mockup.
@@ -261,7 +295,7 @@ mod tests {
 	#[test]
 	fn owned_kitties_can_append_values() {
 		with_externalities(&mut new_test_ext(), || {
-			OwnedKittiesTest::append(&0, 1);
+			OwnedKittiesListTest::append(&0, 1);
 
 			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
  				prev: Some(1),
@@ -273,7 +307,7 @@ mod tests {
  				next: None,
  			}));
 
-			OwnedKittiesTest::append(&0, 2);
+			OwnedKittiesListTest::append(&0, 2);
 
 			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
  				prev: Some(2),
@@ -290,7 +324,7 @@ mod tests {
  				next: None,
  			}));
 
-			OwnedKittiesTest::append(&0, 3);
+			OwnedKittiesListTest::append(&0, 3);
 
   			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
  				prev: Some(3),
@@ -317,11 +351,11 @@ mod tests {
 	#[test]
  	fn owned_kitties_can_remove_values() {
  		with_externalities(&mut new_test_ext(), || {
-			OwnedKittiesTest::append(&0, 1);
- 			OwnedKittiesTest::append(&0, 2);
- 			OwnedKittiesTest::append(&0, 3);
+			OwnedKittiesListTest::append(&0, 1);
+ 			OwnedKittiesListTest::append(&0, 2);
+ 			OwnedKittiesListTest::append(&0, 3);
 
-			OwnedKittiesTest::remove(&0, 2);
+			OwnedKittiesListTest::remove(&0, 2);
 
 			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
  				prev: Some(3),
@@ -340,7 +374,7 @@ mod tests {
  				next: None,
  			}));
 
-			OwnedKittiesTest::remove(&0, 1);
+			OwnedKittiesListTest::remove(&0, 1);
 
   			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
  				prev: Some(3),
@@ -356,7 +390,7 @@ mod tests {
  				next: None,
  			}));
 
-			OwnedKittiesTest::remove(&0, 3);
+			OwnedKittiesListTest::remove(&0, 3);
 
   			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem {
  				prev: None,
